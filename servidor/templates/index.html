@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebApp con Pestañas</title>
+    <!--    Necesito estos scripts para trabajar con MQTT y con websockets-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+</head>
+
+<style>
+        .boton {
+            font-size: 18px;
+            padding: 10px;
+            margin: 5px;
+            cursor: pointer;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .boton-verde { background-color: #4CAF50; }
+        .boton-amarillo { background-color: #FFD700; }
+        .boton-rojo { background-color: #f44336; }
+
+        .direction {
+            display: grid;
+            grid-template-rows: 100px 100px 100px;
+            grid-template-columns: 100px 100px 100px;
+            text-align: center;
+            width:80%;
+            margin-left: 5%;
+        }
+
+        .box {
+            background: #444;
+            border: 1px solid #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: yellowgreen;
+            font-size: 18px;
+            margin: 5px
+        }
+
+
+    </style>
+
+
+<body>
+    <div class="container mt-3">
+        <!-- Aqui defino las tres pestañas que aparecen en la parte superior-->
+        <ul class="nav nav-tabs" id="myTab">
+            <li class="nav-item">
+                <a class="nav-link active" id="control-tab" data-bs-toggle="tab" href="#control">Control</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="mqtt-tab" data-bs-toggle="tab" href="#mqtt">MQTT</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="ws-tab" data-bs-toggle="tab" href="#ws">WebSockets</a>
+            </li>
+        </ul>
+        <!--Ahora defino el contenido de cada pestaña-->
+        <div class="tab-content mt-3">
+            <div class="tab-pane fade show active" id="control">
+                <h3>Control de navegación</h3>
+                <!-- Aqui muestro todos los botones para la conexión y la navegación, y muestro la altitud del dron-->
+
+                <div class="control-manual">
+                    <button id="botonConectar" class="boton" onclick="conectarDron()">Conectar con Dron</button>
+                    <input type="number" id="altura" class="input-metros" placeholder="Altura en metros" />
+                    <button id="botonDespegar" class="boton" onclick="despegarDron()">Despegar</button>
+                    <button id="botonAterrizar" class="boton" onclick="aterrizarDron()">Aterrizar Dron</button>
+                </div>
+                <div class="direction">
+                      <div onclick="moverDron('NorthWest')" class="box">NW</div>
+                      <div onclick="moverDron('North')" class="box">N</div>
+                      <div onclick="moverDron('NorthEast')" class="box">NE</div>
+                      <div onclick="moverDron('West')" class="box">W</div>
+                      <div onclick="moverDron('Stop')" class="box">Stop</div>
+                      <div onclick="moverDron('East')" class="box">E</div>
+                      <div onclick="moverDron('SouthWest')" class="box">SW</div>
+                      <div onclick="moverDron('South')" class="box">S</div>
+                      <div onclick="moverDron('SouthEast')" class="box">SE</div>
+                  </div>
+                <div id="datos-telemetria">
+                </div>
+                <div id="telemetriaDiv" style="font-size: 24px; text-align: center; position: absolute; top: 90%; left: 50%; transform: translate(-50%, -50%);">
+                    <p><strong>Altitud:</strong> <span id="altitudValor">0</span> m</p>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="mqtt">
+                <h3>Video por MQTT</h3>
+                <!-- Aqui colocaré los frames que me llegan por MQTT-->
+                <img id='video-stream2' style='width:100%; max-width:600px;'>
+            </div>
+            <div class="tab-pane fade" id="ws">
+                <h3>Video por WebSockets</h3>
+                <!-- Aqui colocaré los frames que me llegan por el websocket-->
+                <img id='video-stream' style='width:100%; max-width:600px;'>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        <!-- Me conecto por websocket al servidor flask. Por ahí me enviará los frames-->
+        const socket = io();
+        console.log ("conectado al web socket");
+        socket.on('stream_frame', function(data) {
+            <!-- cada vez que recibo un frame por el websocket lo coloco en su sitio-->
+            console.log ("recibo frame por web socket");
+            document.getElementById('video-stream').src = 'data:image/jpeg;base64,' + data;
+        });
+
+        console.log ('voy a conectarme al broker');
+        const client = mqtt.connect ('ws://dronseetac.upc.edu:8000/mqtt', {
+          username: 'dronsEETAC',
+          password: 'mimara1456.'
+        })
+
+
+        client.on('connect', function () {
+            console.log('Connected to MQTT broker');
+            <!-- Me subscribo a todo lo que llegue de la estación de tierra-->
+            client.subscribe('ground/mobileFlask/#');
+        });
+
+        client.on('message', function (topic, message) {
+            console.log ("Recibo mensaje de la estación de tierra");
+            if (topic == "ground/mobileFlask/telemetryInfo") {
+                console.log ("Recibo telemetria");
+                const data = JSON.parse(message.toString());
+                alt = data.alt;
+                estado =  data.state;
+                const telemetriaDiv = document.getElementById('datos-telemetria');
+
+                if (estado == "flying") {
+                <!--  Se ha completado el despegue. Pongo el boton en verde-->
+                      const botonDespegar = document.getElementById('botonDespegar');
+                      botonDespegar.classList.remove('boton-amarillo');
+                      botonDespegar.classList.add('boton-verde');
+                }
+                <!--  Muestro la altitud del dron-->
+                document.getElementById("altitudValor").innerText = alt.toFixed(2);
+            }
+
+            if (topic == "ground/mobileFlask/frame") {
+                console.log ("recibo frame");
+                document.getElementById('video-stream2').src = 'data:image/jpeg;base64,' + message.toString();
+            }
+        });
+
+        function conectarDron() {
+            console.log ("Voy a conectar");
+            client.publish('mobileFlask/ground/connect');
+            const botonConectar = document.getElementById('botonConectar');
+            botonConectar.classList.add('boton-verde');
+        }
+
+        function despegarDron() {
+            const altura = document.getElementById('altura').value;
+            if (altura) {
+                client.publish('mobileFlask/ground/arm_takeOff', altura);
+                botonDespegar.classList.add('boton-amarillo');
+            } else {
+                alert("Por favor, ingrese una altura válida.");
+            }
+        }
+
+        function aterrizarDron() {
+             client.publish('mobileFlask/ground/Land');
+        }
+        function moverDron(direction) {
+            client.publish('mobileFlask/ground/go', direction)
+        }
+    </script>
+
+</body>
+</html>
