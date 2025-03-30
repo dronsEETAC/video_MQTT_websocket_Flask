@@ -70,6 +70,10 @@
             <li class="nav-item">
                 <a class="nav-link" id="ws-tab" data-bs-toggle="tab" href="#ws">WebSockets</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" id="camara-tab" data-bs-toggle="tab" href="#camara">Camara</a>
+            </li>
+
         </ul>
         <!--Ahora defino el contenido de cada pestaña-->
         <div class="tab-content mt-3">
@@ -111,34 +115,55 @@
                 <h3>Video por WebSockets</h3>
                 <button id="botonFotoWebSockets" class="boton" style = 'width: 100%' onclick="foto()">Toma foto</button>
                 <button id="botonRecordWebSockets" class="boton" style = 'width: 100%' onclick="recordWebsockets()">Iniciar grabación</button>
-
                 <!-- Aqui colocaré los frames que me llegan por el websocket-->
                 <img id='video-stream' style='width:100%; max-width:600px;'>
             </div>
+            <div class="tab-pane fade" id="camara">
+                <h3>Camara</h3>
+                <div id="button-container">
+                    <button id="botonFront" class="boton" onclick="frontCamera()">Cámara frontal</button>
+                    <button id="botonBack" class="boton" onclick="backCamera()">Cámara trasera</button>
+                </div>
+                <video id="video" autoplay playsinline></video>
+                <canvas id="canvas" style="display:none;"></canvas>
+                 <img id="processedStream" alt="Video Procesado">
+            </div>
+
         </div>
     </div>
 
     <script>
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const imgStream = document.getElementById("processedStream");
+
+
         <!-- Me conecto por websocket al servidor flask. Por ahí me enviará los frames-->
         const socket = io();
         console.log ("conectado al web socket");
         socket.on('frame_Websocket_from_ground', function(data) {
             <!-- cada vez que recibo un frame por el websocket lo coloco en su sitio-->
-            console.log ("recibo frame de la estacion de tierra por websocket");
             document.getElementById('video-stream').src = 'data:image/jpeg;base64,' + data;
         });
 
         console.log ('voy a conectarme al broker');
         // Diferentes opciones
 
+        //const client = mqtt.connect ('wss://broker.hivemq.com:8884/mqtt', {
+        const client = mqtt.connect ('wss://test.mosquitto.org:8081/mqtt', {
+        //const client = mqtt.connect ('wss://dronseetac.upc.edu:8883', {
 
-        //const client = mqtt.connect ('ws://broker.hivemq.com:8000/mqtt', {
-        const client = mqtt.connect ('ws://test.mosquitto.org:8080/mqtt', {
-        //const client = mqtt.connect ('ws://broker.emqx.io:8083/mqtt', {
-        //const client = mqtt.connect ('ws://dronseetac.upc.edu:8000/mqtt', {
-          //username: 'dronsEETAC',
-          //password: '*******'
-        })
+        //const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+            clean: false,
+            keepalive: 60,
+
+            clientId: 'webapp_' + Math.random().toString(16).substr(2, 8), // ID único
+            //username: 'dronsEETAC',
+            //password: 'mimara1456.',
+            reconnectPeriod: 1000, // Intentar reconectar cada 1s
+        });
+
 
 
         client.on('connect', function () {
@@ -218,6 +243,59 @@
                  client.publish('mobileFlask/ground/stopRecord')
             }
         }
+
+        // Indico que no quiero ver el video del movil en la pantalla
+        video.style.display = 'none';
+        let cam;
+
+        function frontCamera() {
+        // Elijo la cámara frontal
+            cam = "user";
+            const botonFront = document.getElementById('botonFront');
+            botonFront.classList.add('boton-verde');
+
+            startVideo();
+        }
+        function backCamera () {
+        // Elijo la cámara trasera
+            const botonBack = document.getElementById('botonBack');
+            botonBack.classList.add('boton-verde');
+
+            cam = "environment";
+            startVideo();
+        }
+        function startVideo() {
+        // Verificar si getUserMedia es soportado por el navegador
+            if (navigator.mediaDevices.getUserMedia) {
+                 // Aqui le indico la cámara que quiero
+                 navigator.mediaDevices.getUserMedia({
+                     video: { facingMode: cam }
+                 }).then(function(stream) {
+                     // Asignar el stream al elemento de video
+                     video.srcObject = stream;
+                     sendFrames();
+
+                 })
+                   .catch(function(error) {
+                        console.log("Error al acceder a la cámara: ", error);
+                   });
+            } else {
+                 alert("getUserMedia no está soportado por este navegador.");
+            }
+        }
+        function sendFrames() {
+            setInterval(() => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                let frame = canvas.toDataURL("image/jpeg"); // Convertir a base64
+                socket.emit("frame_from_camera", frame); // Enviar frame al servidor
+            }, 200); // 10 FPS
+        }
+        // Recibir frames procesados del servidor y mostrarlos
+        socket.on("processed_frame", function (data) {
+            imgStream.src = data; // Mostrar el frame recibido
+        });
 
     </script>
 

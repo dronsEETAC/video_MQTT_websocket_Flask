@@ -6,6 +6,9 @@ import os
 
 import threading
 import tkinter as tk
+
+import numpy as np
+
 from Dron import Dron
 import random
 import paho.mqtt.client as mqtt
@@ -227,6 +230,7 @@ def video_Websocket_thread ():
             _, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
             frame_b64 = base64.b64encode(buffer).decode('utf-8')
             # envio el frame por el webbsocket
+            print ("Envio")
             sio.emit('frame_Websocket', frame_b64)
             time.sleep(periodo)
 
@@ -243,7 +247,7 @@ def galeria ():
     global fotos, index, mostrandoVideos
     # deshabilito el evento de captura del raton porque no quiero hacer nada al clicar sobre la foto
     fotoLbl.unbind("<Button-1>")
-    fotosFrame.grid(row=0, column=1, rowspan = 16, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
+    fotosFrame.grid(row=0, column=1, rowspan = 17, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
     fotos = [f for f in os.listdir('fotos') if f.endswith((".png", ".jpg", ".jpeg", ".gif"))]
     index = 0
     mostrandoVideos = False
@@ -312,14 +316,48 @@ def reproducir_video (event):
     cv2.destroyAllWindows()
 
 def galeriaVideos ():
-    global videos, index, CARPETA_VIDEOS, mostrandoVideos
-    fotosFrame.grid(row=0, column=1, rowspan=16, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
+    global videos, index, mostrandoVideos
+    fotosFrame.grid(row=0, column=1, rowspan=17, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
 
     videos = [f for f in os.listdir("videos") if f.endswith((".mp4", ".avi", ".mov", ".mkv"))]
     index = 0
     fotoLbl.bind("<Button-1>", reproducir_video)
     mostrandoVideos = True
     mostrar_video()
+
+
+
+def recibirCamaraThread():
+    global latest_frame
+    global receivingCamera
+    global contador
+    # nombre de la ventana tiene que ser diferente cada vez que inicio el thread
+    # para eso uno el contador
+    while receivingCamera:
+        if latest_frame is not None:
+            cv2.imshow("Video camara " + str(contador), latest_frame)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+def recibirCamara ():
+    global receivingCamera
+    global cameraBtn
+    global contador
+
+
+    if receivingCamera:
+        receivingCamera = False
+        cameraBtn['text'] = "Recibir video del movil"
+        cameraBtn['fg'] = 'black'
+        cameraBtn['bg'] = 'dark orange'
+    else:
+        contador = contador + 1
+        receivingCamera = True
+        cameraBtn['text'] = "Detener video del movil"
+        cameraBtn['fg'] = 'white'
+        cameraBtn['bg'] = 'green'
+        threading.Thread (target = recibirCamaraThread).start()
+
 
 # Capturar video desde la cámara
 cap = cv2.VideoCapture(0)
@@ -330,11 +368,29 @@ cont = 0
 grabando = False
 contVideos = 0
 
+receivingCamera = False
+contador = 0
+
+
 # esto es para conectarme al websocket del servidor en desarrollo
 sio.connect('http://localhost:8767')
 
+
 # esto es para conectarme al websocket del servidor en producción
 #sio.connect('http://dronseetac.upc.edu:8106')
+
+
+@sio.event
+def processed_frame(data):
+    # aqui entramos cada vez que recibimos un frame de la cámara del movil
+    global latest_frame
+    print ("recibo frame de camara")
+    frame_bytes = base64.b64decode(data.split(",")[1])
+    # Convertir los bytes en un array NumPy
+    np_arr = np.frombuffer(frame_bytes, np.uint8)
+    # Decodificar la imagen
+    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    latest_frame = frame
 
 print("Conectado al websocket")
 dron = Dron()
@@ -360,7 +416,7 @@ ventana.rowconfigure(12, weight=1)
 ventana.rowconfigure(13, weight=1)
 ventana.rowconfigure(14, weight=1)
 ventana.rowconfigure(15, weight=1)
-
+ventana.rowconfigure(16, weight=1)
 ventana.columnconfigure(0, weight=1)
 ventana.columnconfigure(1, weight=10)
 
@@ -448,7 +504,7 @@ galeriaVideosBtn = tk.Button(ventana, text="Mostrar videos", bg="dark orange", c
 galeriaVideosBtn.grid(row=15, column=0, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
 
 fotosFrame = tk.LabelFrame (ventana, text = "Fotos")
-#fotosFrame.grid(row=0, column=1, rowspan = 15, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
+#fotosFrame.grid(row=0, column=1, rowspan = 16, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
 fotosFrame.rowconfigure(0, weight=1)
 fotosFrame.rowconfigure(1, weight=1)
 fotosFrame.columnconfigure(0, weight=1)
@@ -461,6 +517,9 @@ siguienteBtn.grid(row=1, column=1, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + t
 anteriorBtn = tk.Button(fotosFrame, text="Anterior", bg="dark orange", command=anterior)
 anteriorBtn.grid(row=1, column=0, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
 
+
+cameraBtn = tk.Button(ventana, text="Recibir video del movil", bg="dark orange", command=recibirCamara)
+cameraBtn.grid(row=16, column=0, padx=5, pady=5, sticky=tk.N + tk.S + tk.E + tk.W)
 
 
 ventana.mainloop()
