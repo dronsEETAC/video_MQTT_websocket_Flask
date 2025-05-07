@@ -14,6 +14,10 @@ En el movil se recibe el stream y se puede pedir que se haga una foto o que se g
 
 La webapp usa la template que hay en el fichero index.html.    
 
+Este es un video que muestra el sistema en funcionamiento y tambien da un paseo por el código. ATENCIÓN: el video corresponde a una versión anterior del sistema, en el que aun no se pueden tomar fotos o videos.    
+[![](https://markdown-videos-api.jorgenkh.no/url?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Doi3SAmCxBuo)](https://www.youtube.com/watch?v=1yohVPyZXlE)   
+
+
 ## estacionTierraCamara + appCamara   
 A las funcionalidades de la versión anterios se añade la posibilidad de enviar a la estación de tierra el stream de video capturado por la cámara del movil, pero pasando primero por el servidor, donde el stream de video puede ser procesado. En esta versión símplemente se añade una frase los frames, pero se podrían implementar opciones de procesado de imagen, antes de enviar los frames a tierra.     
 
